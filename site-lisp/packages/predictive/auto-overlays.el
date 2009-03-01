@@ -5,7 +5,7 @@
 ;; Copyright (C) 2005-2008 Toby Cubitt
 
 ;; Author: Toby Cubitt <toby-predictive@dr-qubit.org>
-;; Version: 0.9.4
+;; Version: 0.9.5
 ;; Keywords: automatic, overlays
 ;; URL: http://www.dr-qubit.org/emacs.php
 
@@ -29,6 +29,9 @@
 
 
 ;;; Change Log:
+;;
+;; Version 0.9.5
+;; * bug-fixes in `auto-overlay-save-overlays' and `auto-overlay-load-overlays'
 ;;
 ;; Version 0.9,4
 ;; * made inequalities strict in `auto-o-overlapping-match' (fixes a bug, but
@@ -916,8 +919,8 @@ The overlays can be loaded again later using
     (when buffer (set-buffer buffer))
 
     ;; construct filename
-    (let ((path (or (file-name-directory file) ""))
-	  (filename (file-name-nondirectory file)))
+    (let ((path (or (and file (file-name-directory file)) ""))
+	  (filename (or (and file (file-name-nondirectory file)) "")))
       ;; use default filename if none supplied
       (when (string= filename "")
 	(if (buffer-file-name)
@@ -998,8 +1001,8 @@ overlays were saved."
     (when buffer (set-buffer buffer))
 
     ;; construct filename
-    (let ((path (or (file-name-directory file) ""))
-	  (filename (file-name-nondirectory file)))
+    (let ((path (or (and file (file-name-directory file)) ""))
+	  (filename (and file (file-name-nondirectory file))))
       ;; use default filename if none supplied
       ;; FIXME: should we throw error if buffer not associated with file?
       (when (string= filename "")

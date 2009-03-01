@@ -5,7 +5,7 @@
 ;; Copyright (C) 2005 2008-2009 Toby Cubitt
 
 ;; Author: Toby Cubitt
-;; Version: 0.4.1
+;; Version: 0.5
 ;; Keywords: predictive, setup function, html
 
 ;; This file is part of the Emacs Predictive Completion package.
@@ -28,6 +28,9 @@
 
 
 ;;; Change Log:
+;;
+;; Version 0.5
+;; * updated for compatibility with new Completion-UI
 ;;
 ;; Version 0.4.1
 ;; * made `predictive-setup-html' fail gracefully when a required dictionary
@@ -125,19 +128,14 @@ mode is enabled via entry in `predictive-major-mode-alist'."
       (add-hook 'kill-buffer-hook 'predictive-html-kill-buffer nil t)
 
       ;; use html browser menu if first character of prefix is "<" or "&"
-      (make-local-variable 'completion-menu)
-      (setq completion-menu
-	    (lambda (prefix completions cmpl-function cmpl-prefix-function
-			    cmpl-replaces-prefix)
-	      (if (or (string= (substring prefix 0 1) "<")
-		      (string= (substring prefix 0 1) "&"))
-		  (predictive-html-construct-browser-menu
-		   prefix completions cmpl-function cmpl-prefix-function
-		   cmpl-replaces-prefix)
-		(completion-construct-menu
-		 prefix completions cmpl-function cmpl-prefix-function
-		 cmpl-replaces-prefix))
-	      ))
+      (set (make-local-variable 'predictive-menu-function)
+	   (lambda (overlay)
+	     (if (or (string= (substring (overlay-get overlay 'prefix) 0 1)
+			      "<")
+		     (string= (substring (overlay-get overlay 'prefix) 0 1)
+			      "&"))
+		 (predictive-html-construct-browser-menu overlay)
+	       (completion-construct-menu overlay))))
 
       ;; delete any existing predictive auto-overlay regexps and load html
       ;; auto-overlay regexps
@@ -148,7 +146,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
       ;; load the keybindings and related settings
       (predictive-html-load-keybindings)
       ;; consider \ as start of a word
-      (setq completion-word-thing 'predictive-html-word)
+      (setq predictive-word-thing 'predictive-html-word)
 
       t))  ; indicate successful setup
 
@@ -168,7 +166,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 	  predictive-restore-override-syntax-alist)
     (kill-local-variable 'predictive-restore-override-syntax-alist)
     ;; remove other local variable settings
-    (kill-local-variable 'completion-menu)
+    (kill-local-variable 'predictive-menu-function)
     ;; remove hook functions that save overlays
     (remove-hook 'after-save-hook 'predictive-html-after-save t)
     (remove-hook 'kill-buffer-hook 'predictive-html-kill-buffer t)
@@ -428,19 +426,14 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 
 
 
-(defun predictive-html-construct-browser-menu
-  (prefix completions cmpl-function cmpl-prefix-function cmpl-replaces-prefix)
+(defun predictive-html-construct-browser-menu (overlay)
   "Construct the html browser menu keymap."
 
   ;; construct menu, dropping the last two entries which are a separator and a
   ;; link back to the basic completion menu (would just redisplay this menu,
   ;; since we're using the browser as the default menu)
   (let ((menu (completion-construct-browser-menu
-	       prefix completions
-	       cmpl-function
-	       cmpl-prefix-function
-	       cmpl-replaces-prefix
-	       'completion-browser-menu-item)))
+	       overlay 'completion-browser-menu-item)))
     (setq menu (butlast menu 2))))
 
 

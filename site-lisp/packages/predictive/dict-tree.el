@@ -5,7 +5,7 @@
 ;; Copyright (C) 2004-2009 Toby Cubitt
 
 ;; Author: Toby Cubitt <toby-predictive@dr-qubit.org>
-;; Version: 0.12
+;; Version: 0.12.1
 ;; Keywords: dictionary, tree
 ;; URL: http://www.dr-qubit.org/emacs.php
 
@@ -52,6 +52,10 @@
 
 
 ;;; Change log:
+;;
+;; Version 0.12.1
+;; * added `edebug-prin1' and `edebug-prin1-to-string' advice to prevent
+;;   edebug hanging whilst printing large dictionaries
 ;;
 ;; Version 0.12
 ;; * complete rewrite using new trie.el library
@@ -3268,10 +3272,10 @@ supplied, only complete on dictionaries in that list.
 
 If ALLOW-UNLOADED is non-nil, also complete on the names of
 unloaded dictionaries (actually, on any Elisp file in the current
-`load-path' restricted to subdirectories of your home
-directory). If an unloaded dictionary is read, the name of the
-Elisp file will be returned, without extension, suitable for
-passing to `load-library'."
+`load-path' restricted to subdirectories of your home directory
+whose file name starts with \"dict-\"). If an unloaded dictionary
+is read, the name of the Elisp file will be returned, without
+extension, suitable for passing to `load-library'."
 
   (let (dictname paths)
     ;; when allowing unloaded dictionaries...
@@ -3324,6 +3328,55 @@ passing to `load-library'."
      ;; should never get here!
      (t (error "Unknown error reading dictionary")))
     ))
+
+
+
+;; ----------------------------------------------------------------
+;;            Pretty-print dictionaries during edebug
+
+;; We advise the `edebug-prin1' and `edebug-prin1-to-string' functions
+;; (actually, aliases) so that they pring "#<dict-tree NAME>" instead of
+;; the full print form for dictionaries.
+;;
+;; This is because, if left to its own devices, edebug hangs for ages
+;; whilst printing large dictionaries, and you either have to wait for a
+;; *very* long time for it to finish, or kill Emacs entirely. (Even C-g
+;; C-g fails!)
+;;
+;; Since the print form of a dictionary is practically incomprehensible
+;; anyway, we don't lose much by doing this. If you *really* want to
+;; print dictionaries in full whilst edebugging, despite this warning,
+;; disable the advice.
+;;
+;; FIXME: Should use `cedet-edebug-prin1-extensions' instead of advice
+;;        when `cedet-edebug' is loaded, though I believe this still
+;;        works in that case.
+
+
+(eval-when-compile
+  (require 'edebug)
+  (require 'advice))
+
+
+(ad-define-subr-args 'edebug-prin1 '(object &optional printcharfun))
+
+(defadvice edebug-prin1
+  (around dictree activate compile preactivate)
+  (if (dictree-p object)
+      (let ((pretty (concat "#<dict-tree " (dictree-name object) ">")))
+	(prin1 pretty printcharfun)
+	(setq ad-return-value pretty))
+    ad-do-it))
+
+
+(ad-define-subr-args 'edebug-prin1-to-string '(object &optional noescape))
+
+(defadvice edebug-prin1-to-string
+  (around dictree activate compile preactivate)
+  (if (dictree-p object)
+      (setq ad-return-value
+	    (concat "#<dict-tree " (dictree-name object) ">"))
+    ad-do-it))
 
 
 

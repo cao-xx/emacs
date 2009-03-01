@@ -5,7 +5,7 @@
 ;; Copyright (C) 2004-2009 Toby Cubitt
 
 ;; Author: Toby Cubitt <toby-predictive@dr-qubit.org>
-;; Version: 0.11
+;; Version: 0.12
 ;; Keywords: predictive, setup function, latex
 ;; URL: http://www.dr-qubit.org/emacs.php
 
@@ -29,6 +29,9 @@
 
 
 ;;; Change Log:
+;;
+;; Version 0.12
+;; * updated for compatibility with new Completion-UI
 ;;
 ;; Version 0.11
 ;; * renamed "goto" commands to "jump-to" commands for consistency with
@@ -435,21 +438,15 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 
       ;; display help if first character of accepted completion is "\"
       (when predictive-latex-display-help
-	(add-hook 'completion-accept-functions
-		  'predictive-display-help nil t))
+	(add-hook 'predictive-accept-functions 'predictive-display-help
+		  nil t))
 
       ;; use latex browser menu if first character of prefix is "\"
-      (make-local-variable 'completion-menu)
-      (setq completion-menu
-	    (lambda (prefix completions cmpl-function cmpl-prefix-function
-			    cmpl-replaces-prefix)
-	      (if (eq (aref prefix 0) ?\\)
-		  (predictive-latex-construct-browser-menu
-		   prefix completions
-		   cmpl-function cmpl-prefix-function cmpl-replaces-prefix)
-		(completion-construct-menu
-		 prefix completions
-		 cmpl-function cmpl-prefix-function cmpl-replaces-prefix))))
+      (set (make-local-variable 'predictive-menu-function)
+	   (lambda (overlay)
+	     (if (eq (aref (overlay-get overlay 'prefix) 0) ?\\)
+		 (predictive-latex-construct-browser-menu overlay)
+	       (completion-construct-menu overlay))))
       ;; save predictive-main-dict; restored when predictive mode is disabled
       (setq predictive-restore-main-dict predictive-main-dict)
       ;; store filename for comparison when saving (see
@@ -586,7 +583,8 @@ mode is enabled via entry in `predictive-major-mode-alist'."
       ;; load the keybindings and related settings
       (predictive-latex-load-keybindings)
       ;; consider \ as start of a word
-      (setq completion-word-thing 'predictive-latex-word)
+      (set (make-local-variable 'predictive-word-thing)
+	   'predictive-latex-word)
       (set (make-local-variable 'words-include-escapes) nil)
 
       t))  ; indicate successful setup
@@ -633,7 +631,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 	  predictive-restore-override-syntax-alist)
     (kill-local-variable 'predictive-restore-override-syntax-alist)
     ;; remove other local variable settings
-    (kill-local-variable 'completion-menu)
+    (kill-local-variable 'predictive-menu-function)
     (kill-local-variable 'words-include-escapes)
     (kill-local-variable 'predictive-latex-dict)
     (kill-local-variable 'predictive-latex-math-dict)
@@ -642,7 +640,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
     (kill-local-variable 'predictive-latex-previous-filename)
     ;; remove hook that displays help
     (when predictive-latex-display-help
-      (remove-hook 'completion-accept-functions 'predictive-display-help t))
+      (remove-hook 'predictive-accept-functions 'predictive-display-help t))
     ;; remove hook functions that save overlays etc.
     (remove-hook 'after-save-hook 'predictive-latex-after-save t)
     (remove-hook 'kill-buffer-hook 'predictive-latex-kill-buffer t)
@@ -655,24 +653,31 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 (defun predictive-latex-load-regexps ()
   "Load the predictive mode LaTeX auto-overlay regexp definitions."
 
-  (let* ((word-behaviour (completion-lookup-behaviour nil ?w))
-	 (word-complete (completion-get-completion-behaviour word-behaviour))
-	 (word-resolve (completion-get-resolve-behaviour word-behaviour))
-	 (punct-behaviour (completion-lookup-behaviour nil ?.))
-	 (punct-complete (completion-get-completion-behaviour punct-behaviour))
-	 (punct-resolve (completion-get-resolve-behaviour punct-behaviour))
-	 (whitesp-behaviour (completion-lookup-behaviour nil ? ))
-	 (whitesp-complete (completion-get-completion-behaviour
-			    whitesp-behaviour))
-	 (whitesp-resolve (completion-get-resolve-behaviour
-			   whitesp-behaviour)))
+  (destructuring-bind (word-resolve word-complete word-insert
+		       punct-resolve punct-complete punct-insert
+		       whitesp-resolve whitesp-complete whitesp-insert)
+      (append (auto-completion-lookup-behaviour nil ?w)
+	      (auto-completion-lookup-behaviour nil ?.)
+	      (auto-completion-lookup-behaviour nil ? ))
+  ;; (let* ((word-behaviour (completion-lookup-behaviour nil ?w))
+  ;; 	 (word-complete (completion-get-completion-behaviour word-behaviour))
+  ;; 	 (word-resolve (completion-get-resolve-behaviour word-behaviour))
+  ;; 	 (punct-behaviour (completion-lookup-behaviour nil ?.))
+  ;; 	 (punct-complete (completion-get-completion-behaviour punct-behaviour))
+  ;; 	 (punct-resolve (completion-get-resolve-behaviour punct-behaviour))
+  ;; 	 (whitesp-behaviour (completion-lookup-behaviour nil ? ))
+  ;; 	 (whitesp-complete (completion-get-completion-behaviour
+  ;; 			    whitesp-behaviour))
+  ;; 	 (whitesp-resolve (completion-get-resolve-behaviour
+  ;; 			   whitesp-behaviour)))
 
     ;; %'s start comments that last till end of line
     (auto-overlay-load-definition
      'predictive
      `(line :id comment
 	    ("%" (dict . predictive-main-dict) (priority . 50) (exclusive . t)
-	     (completion-menu . predictive-latex-construct-browser-menu)
+	     (completion-menu-function
+	      . predictive-latex-construct-browser-menu)
 	     (face . (background-color . ,predictive-overlay-debug-colour)))))
 
     ;; \begin{ and \end{ start and end LaTeX environments. Other \<command>{'s
@@ -708,7 +713,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 	       :edge start
 	       (dict . predictive-latex-label-dict)
 	       (priority . 40)
-	       (completion-menu
+	       (completion-menu-function
 		. predictive-latex-construct-browser-menu)
 	       (completion-word-thing . predictive-latex-label-word)
 	       (auto-completion-syntax-alist . ((?w . (add ,word-complete))
@@ -753,63 +758,63 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 			  t))))
 	       ;; (auto-completion-override-syntax-alist
 	       ;;  . ((?* . (add ,word-complete t))))
-	       (completion-menu
+	       (completion-menu-function
 		. predictive-latex-construct-browser-menu)
 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 ;;; 	      (("^\\(\\\\begin{\\)" . 1)
 ;;; 	       :edge start
 ;;; 	       (dict . predictive-latex-env-dict) (priority . 40)
-;;; 	       (completion-menu
+;;; 	       (completion-menu-function
 ;;; 		. predictive-latex-construct-browser-menu)
 ;;; 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 	      (("\\([^\\]\\|^\\)\\(\\\\\\\\\\)*\\(\\\\end{\\)" . 3)
 	       :edge start
 	       (dict . predictive-latex-env-dict) (priority . 40)
-	       (completion-menu
+	       (completion-menu-function
 		. predictive-latex-construct-browser-menu)
 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 ;;; 	      (("^\\(\\\\end{\\)" . 1)
 ;;; 	       :edge start
 ;;; 	       (dict . predictive-latex-env-dict) (priority . 40)
-;;; 	       (completion-menu
+;;; 	       (completion-menu-function
 ;;; 		. predictive-latex-construct-browser-menu)
 ;;; 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 	      (("\\([^\\]\\|^\\)\\(\\\\\\\\\\)*\\(\\\\text{\\)" . 3)
 	       :edge start
 	       (dict . predictive-main-dict) (priority . 40)
-	       (completion-menu
+	       (completion-menu-function
 		. predictive-latex-construct-browser-menu)
 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 ;;; 	      (("^\\(\\\\text{\\)" . 1)
 ;;; 	       :edge start
 ;;; 	       (dict . predictive-main-dict) (priority . 40)
-;;; 	       (completion-menu
+;;; 	       (completion-menu-function
 ;;; 		. predictive-latex-construct-browser-menu)
 ;;; 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 	      (("\\([^\\]\\|^\\)\\(\\\\\\\\\\)*\\(\\\\documentclass\\(\\[.*\\]\\)?{\\)" . 3)
 	       :edge start
 	       (dict . dict-latex-docclass) (priority . 40)
-	       (completion-menu
+	       (completion-menu-function
 		. predictive-latex-construct-browser-menu)
 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 ;;; 	      (("^\\(\\\\documentclass\\(\\[.*\\]\\)?{\\)" . 1)
 ;;; 	       :edge start
 ;;; 	       (dict . dict-latex-docclass) (priority . 40)
-;;; 	       (completion-menu
+;;; 	       (completion-menu-function
 ;;; 		. predictive-latex-construct-browser-menu)
 ;;; 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 	      (("\\([^\\]\\|^\\)\\(\\\\\\\\\\)*\\(\\\\bibliographystyle\\(\\[.*\\]\\)?{\\)" . 3)
 	       :edge start
 	       (dict . dict-latex-bibstyle)
 	       (priority . 40)
-	       (completion-menu
+	       (completion-menu-function
 		. predictive-latex-construct-browser-menu)
 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 ;;; 	      (("^\\(\\\\bibliographystyle\\(\\[.*\\]\\)?{\\)" . 1)
 ;;; 	       :edge start
 ;;; 	       (dict . dict-latex-bibstyle)
 ;;; 	       (priority . 40)
-;;; 	       (completion-menu
+;;; 	       (completion-menu-function
 ;;; 		. predictive-latex-construct-browser-menu)
 ;;; 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 
@@ -842,7 +847,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
      'predictive
      `(self :id inline-math
 	    ("\\$" (dict . predictive-latex-math-dict) (priority . 30)
-	     (completion-menu . predictive-latex-construct-browser-menu)
+	     (completion-menu-function . predictive-latex-construct-browser-menu)
 	     (face . (background-color . ,predictive-overlay-debug-colour)))))
 
     ;; ...as do \[ and \], but not \\[ and \\] etc.
@@ -854,24 +859,24 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 	      (("\\([^\\]\\|^\\)\\(\\\\\\\\\\)*\\(\\\\\\[\\)" . 3)
 	       :edge start
 	       (dict . predictive-latex-math-dict) (priority . 30)
-	       (completion-menu
+	       (completion-menu-function
 		. predictive-latex-construct-browser-menu)
 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 ;;; 	      (("^\\(\\\\\\[\\)" . 1)
 ;;; 	       :edge start
 ;;; 	       (dict . predictive-latex-math-dict) (priority . 30)
-;;; 	       (completion-menu
+;;; 	       (completion-menu-function
 ;;; 		. predictive-latex-construct-browser-menu)
 ;;; 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 	      (("\\([^\\]\\|^\\)\\(\\\\\\\\\\)*\\(\\\\\\]\\)" . 3)
 	       :edge end
 	       (dict . predictive-latex-math-dict) (priority . 30)
-	       (completion-menu . predictive-latex-construct-browser-menu)
+	       (completion-menu-function . predictive-latex-construct-browser-menu)
 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 ;;; 	      (("^\\(\\\\\\]\\)" . 1)
 ;;; 	       :edge end
 ;;; 	       (dict . predictive-latex-math-dict) (priority . 30)
-;;; 	       (completion-menu . predictive-latex-construct-browser-menu)
+;;; 	       (completion-menu-function . predictive-latex-construct-browser-menu)
 ;;; 	       (face . (background-color . ,predictive-overlay-debug-colour)))
 	      ))
 
@@ -884,22 +889,25 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 	       :edge start
 	       (dict . predictive-latex-preamble-dict)
 	       (priority . 20)
-	       (completion-menu . predictive-latex-construct-browser-menu))
+	       (completion-menu-function . predictive-latex-construct-browser-menu))
 ;;; 	      (("^\\(\\\\documentclass\\(\\[.*?\\]\\)?{.*?}\\)" . 1)
 ;;; 	       :edge start
 ;;; 	       (dict . predictive-latex-preamble-dict)
 ;;; 	       (priority . 20)
-;;; 	       (completion-menu . predictive-latex-construct-browser-menu))
+;;; 	       (completion-menu-function
+;;;	        . predictive-latex-construct-browser-menu))
 	      (("\\([^\\]\\|^\\)\\(\\\\\\\\\\)*\\(\\\\begin{document}\\)" . 3)
 	       :edge end
 	       (dict . predictive-latex-preamble-dict)
 	       (priority . 20)
-	       (completion-menu . predictive-latex-construct-browser-menu))
+	       (completion-menu-function
+		. predictive-latex-construct-browser-menu))
 ;;; 	      (("^\\(\\\\begin{document}\\)" . 1)
 ;;; 	       :edge end
 ;;; 	       (dict . predictive-latex-preamble-dict)
 ;;; 	       (priority . 20)
-;;; 	       (completion-menu . predictive-latex-construct-browser-menu))
+;;; 	       (completion-menu-function
+;;;	        . predictive-latex-construct-browser-menu))
 	      ))
 
 
@@ -920,7 +928,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
        :edge start
        (dict . predictive-latex-math-dict)
        (priority . 10)
-       (completion-menu . predictive-latex-construct-browser-menu)
+       (completion-menu-function . predictive-latex-construct-browser-menu)
        (face . (background-color . ,predictive-overlay-debug-colour))))
 ;;;     (auto-overlay-load-regexp
 ;;;      'predictive 'environment
@@ -928,7 +936,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 ;;;        :edge start
 ;;;        (dict . predictive-latex-math-dict)
 ;;;        (priority . 10)
-;;;        (completion-menu . predictive-latex-construct-browser-menu)
+;;;        (completion-menu-function . predictive-latex-construct-browser-menu)
 ;;;        (face . (background-color . ,predictive-overlay-debug-colour))))
     (auto-overlay-load-regexp
      'predictive 'environment
@@ -936,7 +944,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
        :edge end
        (dict . predictive-latex-math-dict)
        (priority . 10)
-       (completion-menu . predictive-latex-construct-browser-menu)
+       (completion-menu-function . predictive-latex-construct-browser-menu)
        (face . (background-color . ,predictive-overlay-debug-colour))))
 ;;;     (auto-overlay-load-regexp
 ;;;      'predictive 'environment
@@ -944,7 +952,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 ;;;        :edge end
 ;;;        (dict . predictive-latex-math-dict)
 ;;;        (priority . 10)
-;;;        (completion-menu . predictive-latex-construct-browser-menu)
+;;;        (completion-menu-function . predictive-latex-construct-browser-menu)
 ;;;        (face . (background-color . ,predictive-overlay-debug-colour))))
     (auto-overlay-load-regexp
      'predictive 'environment
@@ -1117,13 +1125,21 @@ mode is enabled via entry in `predictive-major-mode-alist'."
   (setq predictive-restore-override-syntax-alist
 	auto-completion-override-syntax-alist)
   (make-local-variable 'auto-completion-override-syntax-alist)
+
   ;; get behaviours defined in `auto-completion-syntax-alist'
-  (let* ((word-behaviour (completion-lookup-behaviour nil ?w))
-	 (word-complete (completion-get-completion-behaviour word-behaviour))
-	 (word-resolve (completion-get-resolve-behaviour word-behaviour))
-	 (punct-behaviour (completion-lookup-behaviour nil ?.))
-	 (punct-complete (completion-get-completion-behaviour punct-behaviour))
-	 (punct-resolve (completion-get-resolve-behaviour punct-behaviour)))
+  (destructuring-bind (word-resolve word-complete word-insert
+		       punct-resolve punct-complete punct-insert
+		       whitesp-resolve whitesp-complete whitesp-insert)
+      (append (auto-completion-lookup-behaviour nil ?w)
+	      (auto-completion-lookup-behaviour nil ?.)
+	      (auto-completion-lookup-behaviour nil ? ))
+  ;; (let* ((word-behaviour (completion-lookup-behaviour nil ?w))
+  ;; 	 (word-complete (completion-get-completion-behaviour word-behaviour))
+  ;; 	 (word-resolve (completion-get-resolve-behaviour word-behaviour))
+  ;; 	 (punct-behaviour (completion-lookup-behaviour nil ?.))
+  ;; 	 (punct-complete (completion-get-completion-behaviour punct-behaviour))
+  ;; 	 (punct-resolve (completion-get-resolve-behaviour punct-behaviour)))
+
     ;; make "\", "$", "{" and "}" do the right thing
     (setq auto-completion-override-syntax-alist
 	  (append
@@ -2310,27 +2326,19 @@ they exist."
 ;;;=============================================================
 ;;;                Completion-browser functions
 
-(defun predictive-latex-construct-browser-menu
-  (prefix completions cmpl-function cmpl-prefix-function cmpl-replaces-prefix)
+(defun predictive-latex-construct-browser-menu (overlay)
   "Construct the LaTeX browser menu keymap."
 
   ;; construct menu, dropping the last two entries which are a separator and a
   ;; link back to the basic completion menu (would just redisplay this menu,
   ;; since we're using the browser as the default menu for LaTeX commands)
   (let ((menu (completion-construct-browser-menu
-	       prefix completions
-	       cmpl-function
-	       cmpl-prefix-function
-	       cmpl-replaces-prefix
-	       'predictive-latex-browser-menu-item)))
+	       overlay 'predictive-latex-browser-menu-item)))
     (setq menu (butlast menu 2))))
 
 
 
-(defun predictive-latex-browser-menu-item
-  (prefix cmpl
-   cmpl-function cmpl-prefix-function cmpl-replaces-prefix
-   &rest ignore)
+(defun predictive-latex-browser-menu-item (cmpl ignored1 ignored2 overlay)
   "Construct predictive LaTeX completion browser menu item."
 
   (let (submenu)
@@ -2348,7 +2356,7 @@ they exist."
      (submenu
       ;; if submenu definition is a function, call it
       (when (functionp submenu)
-	(setq submenu (funcall submenu prefix cmpl)))
+	(setq submenu (funcall submenu cmpl)))
       ;; if submenu definition is a symbol, evaluate it
       (when (symbolp submenu) (setq submenu (eval submenu)))
       ;; if submenu definition is a dictionary or list of dictionaries,
@@ -2373,17 +2381,19 @@ they exist."
 
       ;; create sub-menu keymap
       (setq submenu (completion-browser-sub-menu
-		     prefix submenu
-		     cmpl-function cmpl-prefix-function cmpl-replaces-prefix
+		     submenu
 		     'predictive-latex-browser-menu-item
-		     'completion-browser-sub-menu))
+		     'completion-browser-sub-menu
+		     overlay))
       ;; add completion itself to the menu
       (define-key submenu [separator-item-sub-menu] '(menu-item "--"))
       (define-key submenu [completion-insert-root]
 	(list 'menu-item cmpl
 	      `(lambda ()
 		 (list ,(if (stringp cmpl) cmpl (car cmpl))
-		       ,(if (stringp cmpl) (length prefix) (cdr cmpl))))))
+		       ,(if (stringp cmpl)
+			    (length (overlay-get overlay 'prefix))
+			  (cdr cmpl))))))
       ;; return the menu keymap
       submenu)
 
@@ -2392,7 +2402,9 @@ they exist."
      ;; completion item
      (t `(lambda ()
 	   (list ,(if (stringp cmpl) cmpl (car cmpl))
-		 ,(if (stringp cmpl) (length prefix) (cdr cmpl))))))))
+		 ,(if (stringp cmpl)
+		      (length (overlay-get overlay 'prefix))
+		    (cdr cmpl))))))))
 
 
 
@@ -2412,7 +2424,7 @@ Intended to be used as the \"resolve\" entry in
   (let (overlay completion)
     ;; if completion characters contain REGEXP, insert characters up to first
     ;; regexp match, and add them to the completion overlay prefix
-    (when (and (setq overlay (completion-overlay-at-point))
+    (when (and (setq overlay (completion-ui-overlay-at-point))
 	       (setq completion (buffer-substring-no-properties
 				 (overlay-start overlay)
 				 (overlay-end overlay)))

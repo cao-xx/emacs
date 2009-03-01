@@ -4,7 +4,7 @@
 ;; Copyright (C) 2008 Toby Cubitt
 
 ;; Author: Toby Cubitt <toby-predictive@dr-qubit.org>
-;; Version: 0.2
+;; Version: 0.3
 ;; Keywords: predictive, setup function, texinfo
 ;; URL: http://www.dr-qubit.org/emacs.php
 
@@ -28,6 +28,9 @@
 
 
 ;;; Change Log:
+;;
+;; Version 0.3
+;; * updated for compatibility with new Completion-UI
 ;;
 ;; Version 0.2
 ;; * define delimiter portion of all brace regexps to fix overlay bug
@@ -151,18 +154,11 @@ mode is enabled via entry in `predictive-major-mode-alist'."
       (add-hook 'kill-buffer-hook 'predictive-texinfo-kill-buffer nil t)
 
       ;; use Texinfo browser menu if first character of prefix is "@"
-      (make-local-variable 'completion-menu)
-      (setq completion-menu
-	    (lambda (prefix completions
-		     cmpl-function cmpl-prefix-function cmpl-replaces-prefix)
-	      (if (string= (substring prefix 0 1) "@")
-		  (predictive-texinfo-construct-browser-menu
-		   prefix completions
-		   cmpl-function cmpl-prefix-function cmpl-replaces-prefix)
-		(completion-construct-menu
-		 prefix completions
-		 cmpl-function cmpl-prefix-function cmpl-replaces-prefix))
-	      ))
+      (set (make-local-variable 'predictive-menu-function)
+	   (lambda (overlay)
+	     (if (string= (substring (overlay-get overlay 'prefix) 0 1) "@")
+		 (predictive-texinfo-construct-browser-menu overlay)
+	       (completion-construct-menu overlay))))
       ;; save predictive-main-dict; restored when predictive mode is disabled
       (setq predictive-restore-main-dict predictive-main-dict)
 
@@ -202,7 +198,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
       ;; load the keybindings and related settings
       (predictive-texinfo-load-keybindings)
       ;; consider @ as start of a word
-      (setq completion-word-thing 'predictive-texinfo-word)
+      (setq predictive-word-thing 'predictive-texinfo-word)
 
       t))  ; indicate successful setup
 
@@ -224,7 +220,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
     ;; remove other local variable settings
     (kill-local-variable 'predictive-texinfo-dict)
     (kill-local-variable 'predictive-texinfo-local-texinfo-dict)
-    (kill-local-variable 'completion-menu)
+    (kill-local-variable 'predictive-menu-function)
     ;; remove hook functions that save overlays etc.
     (remove-hook 'after-save-hook 'predictive-texinfo-after-save t)
     (remove-hook 'kill-buffer-hook 'predictive-texinfo-kill-buffer t)
@@ -236,17 +232,23 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 (defun predictive-texinfo-load-regexps ()
   "Load the predictive mode Texinfo auto-overlay regexp definitions."
 
-  (let* ((word-behaviour (completion-lookup-behaviour nil ?w))
-	 (word-complete (completion-get-completion-behaviour word-behaviour))
-	 (word-resolve (completion-get-resolve-behaviour word-behaviour))
-	 (punct-behaviour (completion-lookup-behaviour nil ?.))
-	 (punct-complete (completion-get-completion-behaviour punct-behaviour))
-	 (punct-resolve (completion-get-resolve-behaviour punct-behaviour))
-	 (whitesp-behaviour (completion-lookup-behaviour nil ? ))
-	 (whitesp-complete (completion-get-completion-behaviour
-			    whitesp-behaviour))
-	 (whitesp-resolve (completion-get-resolve-behaviour
-			   whitesp-behaviour)))
+  (destructuring-bind (word-resolve word-complete word-insert
+		       punct-resolve punct-complete punct-insert
+		       whitesp-resolve whitesp-complete whitesp-insert)
+      (append (auto-completion-lookup-behaviour nil ?w)
+	      (auto-completion-lookup-behaviour nil ?.)
+	      (auto-completion-lookup-behaviour nil ? ))
+  ;; (let* ((word-behaviour (completion-lookup-behaviour nil ?w))
+  ;; 	 (word-complete (completion-get-completion-behaviour word-behaviour))
+  ;; 	 (word-resolve (completion-get-resolve-behaviour word-behaviour))
+  ;; 	 (punct-behaviour (completion-lookup-behaviour nil ?.))
+  ;; 	 (punct-complete (completion-get-completion-behaviour punct-behaviour))
+  ;; 	 (punct-resolve (completion-get-resolve-behaviour punct-behaviour))
+  ;; 	 (whitesp-behaviour (completion-lookup-behaviour nil ? ))
+  ;; 	 (whitesp-complete (completion-get-completion-behaviour
+  ;; 			    whitesp-behaviour))
+  ;; 	 (whitesp-resolve (completion-get-resolve-behaviour
+  ;; 			   whitesp-behaviour)))
 
     ;; @c starts comments that last till end of line
     (auto-overlay-load-definition
@@ -287,7 +289,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 	       :edge start
 	       (dict . predictive-texinfo-node-dict)
 	       (priority . 40)
-	       (completion-menu
+	       (completion-menu-function
 		. predictive-texinfo-construct-browser-menu)
 	       (completion-word-thing . predictive-texinfo-node-word)
 	       (auto-completion-syntax-alist . ((?w . (add ,word-complete))
@@ -302,7 +304,7 @@ mode is enabled via entry in `predictive-major-mode-alist'."
 ;;; 	       :edge start
 ;;; 	       (dict . predictive-texinfo-node-dict)
 ;;; 	       (priority . 40)
-;;; 	       (completion-menu
+;;; 	       (completion-menu-function
 ;;; 		. predictive-texinfo-construct-browser-menu)
 ;;; 	       (completion-word-thing . predictive-texinfo-node-word)
 ;;; 	       (auto-completion-syntax-alist . ((?w . (add ,word-complete))
@@ -586,18 +588,26 @@ mode is enabled via entry in `predictive-major-mode-alist'."
   (setq predictive-restore-override-syntax-alist
 	auto-completion-override-syntax-alist)
   (make-local-variable 'auto-completion-override-syntax-alist)
+
   ;; get behaviours defined in `auto-completion-syntax-alist'
-  (let* ((word-behaviour (completion-lookup-behaviour nil ?w))
-	 (word-complete (completion-get-completion-behaviour word-behaviour))
-	 (word-resolve (completion-get-resolve-behaviour word-behaviour))
-	 (punct-behaviour (completion-lookup-behaviour nil ?.))
-	 (punct-complete (completion-get-completion-behaviour punct-behaviour))
-	 (punct-resolve (completion-get-resolve-behaviour punct-behaviour))
-	 (whitesp-behaviour (completion-lookup-behaviour nil ? ))
-	 (whitesp-complete (completion-get-completion-behaviour
-			    whitesp-behaviour))
-	 (whitesp-resolve (completion-get-resolve-behaviour
-			   whitesp-behaviour)))
+  (destructuring-bind (word-resolve word-complete word-insert
+		       punct-resolve punct-complete punct-insert
+		       whitesp-resolve whitesp-complete whitesp-insert)
+      (append (auto-completion-lookup-behaviour nil ?w)
+	      (auto-completion-lookup-behaviour nil ?.)
+	      (auto-completion-lookup-behaviour nil ? ))
+  ;; (let* ((word-behaviour (completion-lookup-behaviour nil ?w))
+  ;; 	 (word-complete (completion-get-completion-behaviour word-behaviour))
+  ;; 	 (word-resolve (completion-get-resolve-behaviour word-behaviour))
+  ;; 	 (punct-behaviour (completion-lookup-behaviour nil ?.))
+  ;; 	 (punct-complete (completion-get-completion-behaviour punct-behaviour))
+  ;; 	 (punct-resolve (completion-get-resolve-behaviour punct-behaviour))
+  ;; 	 (whitesp-behaviour (completion-lookup-behaviour nil ? ))
+  ;; 	 (whitesp-complete (completion-get-completion-behaviour
+  ;; 			    whitesp-behaviour))
+  ;; 	 (whitesp-resolve (completion-get-resolve-behaviour
+  ;; 			   whitesp-behaviour)))
+
     ;; make "\", "$", "{" and "}" do the right thing
     (setq auto-completion-override-syntax-alist
 	  (append
@@ -1081,52 +1091,50 @@ the flag at point (if any)."
 ;;;=============================================================
 ;;;                Completion-browser functions
 
-(defun predictive-texinfo-construct-browser-menu
-  (prefix completions cmpl-function cmpl-prefix-function cmpl-replaces-prefix)
+(defun predictive-texinfo-construct-browser-menu (overlay)
   "Construct the Texinfo browser menu keymap."
-
   ;; construct menu, dropping the last two entries which are a separator and a
   ;; link back to the basic completion menu (would just redisplay this menu,
   ;; since we're using the browser as the default menu)
   (let ((menu (completion-construct-browser-menu
-	       prefix completions
-	       cmpl-function cmpl-prefix-function cmpl-replaces-prefix
-	       'predictive-texinfo-browser-menu-item)))
+	       overlay 'predictive-texinfo-browser-menu-item)))
     (setq menu (butlast menu 2))))
 
 
 
-(defun predictive-texinfo-browser-menu-item
-  (prefix cmpl cmpl-function cmpl-prefix-function cmpl-replaces-prefix
-	  &rest ignore)
+(defun predictive-texinfo-browser-menu-item (cmpl ignore1 ignore2 overlay)
   "Construct predictive Texinfo completion browser menu item."
 
   ;; if entry is @end, create sub-menu containing environment completions
-  (if (string= (concat prefix cmpl) "@end")
+  (if (string= (concat (overlay-get overlay 'prefix) cmpl) "@end")
       ;; find all Texinfo environments
       (let ((envs (dictree-complete dict-texinfo-env ""))
 	    (menu (make-sparse-keymap)))
 	(setq envs (mapcar (lambda (e) (concat cmpl " " (car e))) envs))
 	;; create sub-menu keymap
 	(setq menu (completion-browser-sub-menu
-		    prefix envs
-		    cmpl-function cmpl-prefix-function cmpl-replaces-prefix
+		    envs
 		    'predictive-texinfo-browser-menu-item
-		    'completion-browser-sub-menu))
+		    'completion-browser-sub-menu
+		    overlay))
 	;; add completion itself (@end) to the menu
 	(define-key menu [separator-item-sub-menu] '(menu-item "--"))
 	(define-key menu [completion-insert-root]
-	  (list 'menu-item (concat prefix cmpl)
+	  (list 'menu-item (concat (overlay-get overlay 'prefix) cmpl)
 		`(lambda ()
 		   (list ,(if (stringp cmpl) cmpl (car cmpl))
-			 ,(if (stringp cmpl) (length prefix) (cdr cmpl))))))
+			 ,(if (stringp cmpl)
+			      (length (overlay-get overlay 'prefix))
+			    (cdr cmpl))))))
 	;; return the menu keymap
 	menu)
 
     ;; otherwise, create a selectable completion item
     `(lambda ()
        (list ,(if (stringp cmpl) cmpl (car cmpl))
-	     ,(if (stringp cmpl) (length prefix) (cdr cmpl))))))
+	     ,(if (stringp cmpl)
+		  (length (overlay-get overlay 'prefix))
+		(cdr cmpl))))))
 
 
 

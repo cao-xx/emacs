@@ -14,7 +14,7 @@
 
 @copying
 This manual documents the Emacs Predictive Completion package, version
-0.22
+0.23
 @c --version--
 
 Copyright @copyright{} 2005--2009 Toby Cubitt
@@ -32,7 +32,7 @@ Documentation License".
 
 @titlepage
 @title Emacs Predictive Completion Manual
-@subtitle Version 0.22
+@subtitle Version 0.23
 @c --version--
 @author Toby Cubitt
 
@@ -477,9 +477,9 @@ mode doesn't complete words at all, it only auto-corrects words you
 typed. For this to be useful, you also have to customize a number of
 options appropriately. @xref{Miscellaneous Options}.
 
-If you are using @command{auto-completion-mode}, you can (by default)
-continue to type normally. Possible completion candidates will be
-displayed, ranked in order of likelihood, but will not be accepted
+Even if you are using @command{auto-completion-mode}, you can (by
+default) continue to type normally. Possible completion candidates will
+be displayed, ranked in order of likelihood, but will not be accepted
 unless you do so explicitly using @command{completion-accept}, bound to
 @kbd{C-RET}. (All the key bindings described here are the defaults, and
 can of course be customized to anything you desire, @pxref{Keymaps and
@@ -500,7 +500,7 @@ completion candidate, you can do so using @kbd{C-DEL} or @kbd{C-SPC}
 @findex auto-completion-mode
 
 If you aren't using @command{auto-completion-mode}, you will need to
-call the @command{complete-word-at-point} command whenever you want to
+call the @command{complete-predictive} command whenever you want to
 complete the word at or next to the point. This is bound to @kbd{M-TAB},
 @kbd{M-SHIFT-TAB}, @kbd{M-/} and @kbd{M-?}. There are then two
 ``styles'' of behaviour: completions can either be ephemeral, acting
@@ -513,11 +513,11 @@ insert those characters into the buffer unless you explicitly reject it
 using @command{completion-reject}, bound to @kbd{C-DEL}. (This is the
 more traditional Emacs-style behaviour, that you may be used to from
 using @command{dabbrev}s, for example.) The choice is yours, and is
-controlled by the @env{completion-resolve-behaviour} customization
-option (@pxref{Miscellaneous Options}). (Note that these two different
-``styles'' of behaviour are mainly relevant when Dynamic Completion is
-enabled, as it is by default. This is described below.)
-@findex complete-word-at-point
+controlled by the @env{completion-accept-or-reject-by-default}
+customization option (@pxref{Miscellaneous Options}). (Note that these
+two different ``styles'' of behaviour are mainly relevant when Dynamic
+Completion is enabled, as it is by default. This is described below.)
+@findex complete-predictive
 
 Whether you are using @command{auto-completion-mode} or not, there are
 various ways to display and select completions. All of them can be
@@ -547,7 +547,7 @@ Tooltip}). When completion hot-keys are enabled, both of these also
 indicate which completion candidate corresponds to which hot-key. If you
 only want the hotkeys to be enabled when the tooltip or pop-up frame
 (see below) are displayed, then set @env{completion-use-hotkeys} to
-@code{'pop-up}.
+@code{pop-up}.
 
 The completion tooltip is more than just a visual reminder of which
 completions are available. When it is displayed, you can select a
@@ -564,22 +564,26 @@ can use the usual Emacs motion keys to move through the list and select
 a candidate. However, you can also toggle between displaying just the
 most likely completion candidates and displaying all possible
 completions, using @command{completion-popup-frame-toggle-all}, bound to
-@kbd{M-Tab} and @kbd{M-/}. To get rid of a pop-up frame, use
-@command{completion-popup-frame-cancel}, bound to @kbd{C-up} and
-@kbd{M-up}. Note that all of these key bindings are only active when the
-pop-up frame has the focus. If you manually switch the focus back to the
-original frame, the pop-up frame will disappear as soon as you type
-anything.
+@kbd{M-Tab} and @kbd{M-/}. You can still type and delete characters when
+the pop-up frame is displayed; it will be updated to reflect the new set
+of completion candidates. To get rid of a pop-up frame, use
+@command{completion-popup-frame-dismiss}, bound to @kbd{C-up} and
+@kbd{M-up}. (Note that the pop-up frame key bindings are only active
+when the pop-up frame has the focus. If you manually switch the focus
+back to the original frame, you can still type normally and the pop-up
+frame will be updated appropriately, but the
+@command{completion-popup-frame-toggle-all} and
+@command{completion-popup-frame-dismiss} bindings will not work.)
 
 The completion menu is the most flexible way of selecting completions,
 and can be displayed using @command{completion-show-menu}, bound to
 @kbd{M-down}. Again, it displays the completion candidates and lets you
 select them, and, like the pop-up frame, it also allows you to see all
 possible completions, rather than just displaying the most likely ones,
-by selecting @samp{Browser} item from the menu. The completion browser
-doesn't just display all possible completions in a big list. Instead, it
-organises them hierarchically, making it easy to browse through them
-until you find the one you want.
+by selecting the @samp{Browser} item from the menu. The completion
+browser doesn't just display all possible completions in a big
+list. Instead, it organises them hierarchically, making it easier to
+browse through them until you find the one you want.
 
 The completion tooltip, pop-up frame, and menu all display a list of
 completion candidates, but each has its own advantages and
@@ -636,7 +640,7 @@ a long delay.}.
 @cindex completions, inserting
 
 @ftable @command
-@item complete-word-at-point
+@item complete-predictive
 (@kbd{M-TAB}, @kbd{M-SHIFT-TAB}, @kbd{M-/}, @kbd{M-?}) Find completions
 for the word at or next to the point.
 
@@ -675,11 +679,10 @@ string.
 @findex completion-scoot-ahead
 @end ftable
 
-Note that, apart from the @command{complete-word-at-point} bindings,
-none of the other key bindings are active until you have started
-completing a word, either using @command{complete-word-at-point} or
-automatically if you are using @command{auto-completion-mode}
-(@pxref{Auto-Completion Mode}).
+Note that, apart from the @command{complete-predictive} bindings, none
+of the other key bindings are active until you have started completing a
+word, either using @command{complete-predictive} or automatically if you
+are using @command{auto-completion-mode} (@pxref{Auto-Completion Mode}).
 @cindex auto-completion mode
 @cindex completion, automatic
 @findex auto-completion-mode
@@ -728,11 +731,12 @@ individual characters.
 
 These commands replace the standard Emacs deletion and kill commands, so
 that they deal sensibly with any provisional completion that might be
-present in the region being deleted. If auto completion mode is enabled,
-the backwards deletion commands also re-complete any remaining prefix
-when they delete backwards into part of a word (@pxref{Auto-Completion
-Mode}). In all other respects, these commands are identical to the
-equivalent standard deletion commands with corresponding names.
+encountered in the region being deleted. If
+@command{auto-completion-mode} is enabled, the backwards deletion
+commands also re-complete any remaining prefix when they delete
+backwards into part of a word (@pxref{Auto-Completion Mode}). In all
+other respects, these commands are identical to the equivalent standard
+Emacs deletion commands with corresponding names.
 @findex backward-delete
 
 
@@ -750,7 +754,9 @@ especially useful when used in conjunction with dynamic completion
 (@pxref{Dynamic Completion}). If you would like
 @command{auto-completion-mode} to be enabled automatically whenever
 predictive mode is enabled, set the @env{predictive-auto-complete}
-variable (set by default).
+variable (set by default). Otherwise, you will not only have to enable
+@command{auto-completion-mode} manually, but also manually set the
+@env{auto-completion-source} to the @code{predictive} setting.
 
 @ftable @command
 @item auto-completion-mode
@@ -763,6 +769,11 @@ automatically as words are typed.
 When non-nil (the default), enabling and disabling predictive mode will
 also automatically enable or disable @command{auto-completion-mode}, without
 needing to run the @command{auto-completion-mode} command manually.
+
+@item auto-completion-source
+If @env{predictive-auto-complete} is @emph{not} enabled, then you must
+set this variable manually to the @code{predictive} setting in order to
+use predictive auto-completion.
 @end vtable
 
 Word-constituent characters are added to the current word before finding
@@ -801,7 +812,7 @@ Minimum number of characters that must be typed before the various
 completion mechanisms are activated when using
 @command{auto-completion-mode}. Note that you can still explicitly
 invoke completion on a shorter prefix using the
-@command{complete-word-at-point} command (@pxref{Inserting
+@command{complete-predictive} command (@pxref{Inserting
 Completions}).
 
 @item auto-completion-delay
@@ -839,10 +850,10 @@ likely completion (@pxref{Auto-Completion Mode}).
 Note that since the @command{completion-reject} command ends the
 completion process, if you want to find completions for the same prefix
 again after previously rejectng a completion, you have to do it manually
-with @command{complete-word-at-point} even when
+with @command{complete-predictive} even when
 @command{auto-completion-mode} is enabled. @xref{Inserting Completions},
 and @ref{Auto-Completion Mode}.
-@findex complete-word-at-point
+@findex complete-predictive
 @findex auto-completion-mode
 
 @vtable @env
@@ -859,9 +870,6 @@ completion.
 When non-nil, any differences between the prefix you typed and the
 corresponding characters from the current completion are highlighted in
 a different colour.
-
-@item completion-dynamic-face
-The face used to highlight the provisional dynamic completion.
 
 @item completion-dynamic-common-substring-face
 The face used to highlight the longest common substring in a dynamic
@@ -888,7 +896,7 @@ You will probably also want to display a list of the possible
 completions, so that you know which completion will be selected by each
 of these ``hotkeys'' (@pxref{Displaying Completions in the Echo Area},
 and @ref{Completion Tooltip}). By setting @env{completion-use-hotkeys}
-to @code{'pop-up}, the hotkeys will only be enabled when the tooltip or
+to @code{pop-up}, the hotkeys will only be enabled when the tooltip or
 pop-up frame (@pxref{Pop-Up Frame}) are displayed.
 
 @noindent
@@ -898,7 +906,7 @@ The following variables affect the behaviour of the completion hotkeys:
 @item completion-use-hotkeys
 When non-nil, enable completion hotkeys, allowing completion candidates
 to be selected by hitting a single key. When set to the symbol
-@code{'pop-up}, the hotkeys are only enabled when the tooltip
+@code{pop-up}, the hotkeys are only enabled when the tooltip
 (@pxref{Completion Tooltip}) or pop-up frame (@pxref{Pop-Up Frame}) are
 displayed.
 
@@ -928,7 +936,7 @@ found! The maximum number to find is limited by
 @cindex completion, echo area
 @cindex echo area
 
-If the customisation variable @env{completion-use-help-echo} is non-nil,
+If the customisation variable @env{completion-use-echo} is non-nil,
 a list of completion candidates is displayed in the echo
 area. If @env{completion-use-hotkeys} is also enabled
 (@pxref{Completion Hotkeys}, the hot-key characters will be displayed
@@ -952,7 +960,8 @@ that select them, if enabled) is displayed in the echo area.
 @cindex completion, displaying list of
 
 Calling @command{completion-show-tooltip} when completing, bound to
-@kbd{S-Down}, displays a list of available completions in a tooltip. The
+@kbd{S-Down} when @command{completion-use-tooltip} is enabled, displays
+a list of available completions in a tooltip. The
 @command{completion-tooltip-cycle} and
 @command{completion-tooltip-cycle-backwards} commands, bound to the
 @kbd{down} and @kbd{up} arrow keys, can then be used to select a
@@ -1121,7 +1130,7 @@ feature:
 
 @vtable @env
 @item completion-auto-show
-When set to @code{'tooltip}, @code{'pop-up} or @code{'menu}, the
+When set to @code{tooltip}, @code{pop-up} or @code{menu}, the
 corresponding list of completions is displayed automatically when
 completing. When nil, nothing is displayed automatically (they can still
 be displayed manually when required).
@@ -1144,29 +1153,41 @@ The following variables affect the overall behaviour of predictive mode:
 
 
 @vtable @env
-@item completion-resolve-behaviour
-Determines what to do with dynamics completions that have not explicitly
-been accepted or rejected. The options are: @code{leave}, which just
-leaves the old provisional completion in place to return to later if you
-so desire, @code{accept} and @code{reject}, which accept or reject the
-completion, @code{accept-common}, which accepts the longest common
-substring of the completion but deletes the rest, and @code{ask}, which
-asks you whether you want to accept or reject.
+@item completion-accept-or-reject-by-default
+Determines the default action for the current completion. The options
+are: @code{accept} and @code{reject}, which accept or reject the
+completion, and @code{accept-common}, which accepts the longest common
+substring of the completion but deletes the rest.
+
+@item completion-how-to-resolve-old-completions
+Determines what to do with old, abandoned completions elsewhere in the
+buffer. The options are: @code{accept} and @code{reject}, which accept
+or reject old completions, @code{leave}, which just leaves any old
+completions in place to return to later if you so desire, and
+@code{ask}, which asks you whether you want to accept or reject each
+completion.
 @end vtable
 
-@env{completion-resolve-behaviour} controls what happens when you move
-the point away from a provisional dynamic completion (@pxref{Dynamic
-Completion}) and start typing elsewhere in the buffer. When
-@command{auto-completion-mode} is disabled, it also determines how the
-@emph{current} dynamic completion behaves. If
-@env{completion-resolve-behaviour} is set to @code{'reject}, the current
-dynamic completion only serves as a visual indicator; it disappears
-unless you explicitly accept it. If @env{completion-resolve-behaviour}
-is set to anything else, dynamic completions really are part of the
-buffer, and you must explicitly reject them to get rid of the inserted
-characters.
+@env{completion-hot-to-resolve-old-completions} controls what happens
+when you move the point away from a provisional dynamic completion
+(@pxref{Dynamic Completion}) and start typing elsewhere in the
+buffer. When @command{auto-completion-mode} is disabled,
+@env{completion-accept-or-reject-by-default} determines how the
+@emph{current} completion behaves. If it is set to @code{reject}, the
+completion user-interfaces serve only as a visual indicators; a
+completion will not become part of the buffer unless you explicitly
+accept it. If @env{completion-accept-or-reject-by-default} is set to
+anything else, completions really are part of the buffer, and you must
+explicitly reject them to get rid of any inserted characters.
 
-There is one exception to this behaviour: whether or not
+When @command{auto-completion-mode} is enabled,
+@env{completion-accept-or-reject-by-default} has no effect. More
+fine-grained control is instead provided by
+@env{auto-completion-syntax-alist} and
+@env{auto-completion-override-syntax-alist}. @xref{Auto-Completion
+Mode}.
+
+There is one exception to all this: whether or not
 @command{auto-completion-mode} is enabled, if you move the point to
 somewhere @emph{within} a dynamic completion and start typing, the part
 of the completion before the point is always accepted (and the remaining
@@ -1174,17 +1195,17 @@ characters deleted). This is almost always what you intended, and leads
 to less surprises.
 @cindex completion, automatic
 @cindex auto-completion mode
-@findex complete-word-at-point
+@findex complete-predictive
 
 
 @vtable @env
 @item completion-overwrite
 When non-nil, completions overwrite the rest of the word after point,
-both when you manually call @command{complete-word-at-point} with the
-point positioned in the middle of a word, and when
+both when you manually call @command{complete-predictive} with the point
+positioned in the middle of a word, and when
 @command{auto-completion-mode} is enabled and you type a new character
 in the middle of a word. Enabled by default.
-@findex complete-word-at-point
+@findex complete-predictive
 @end vtable
 
 Predictive mode doesn't play all that well with
@@ -1212,6 +1233,17 @@ you are prepared to set aside for selecting completions
 
 
 @vtable @env
+@item completion-highlight-face
+The face used to highlight the completion candidates in the various
+user-interfaces.
+@end vtable
+
+@env{completion-highlight-face} is used to highlight the current
+dynamic completion in the buffer, and also to highlight the currently
+selected completion in the tooltip and pop-up frame.
+
+
+@vtable @env
 @item predictive-auto-correction-no-completion
 When non-nil, predictive mode won't complete words at all! Instead, it
 will only auto-correct the words you type, using the definitions in
@@ -1233,7 +1265,8 @@ certainly want to enable @command{auto-completion-mode}
 (@pxref{Auto-Completion Mode}, change the default
 @env{auto-completion-syntax-alist} @samp{Acceptance behaviour} to
 @samp{punctuation accepts} (@pxref{Syntax}), and set
-@env{completion-resolve-behaviour} to @code{accept} (see above).
+@env{completion-accept-or-reject-by-default} to @code{accept} (see
+above).
 
 
 @vtable @env
@@ -1565,10 +1598,10 @@ automatically be saved when they are unloaded (either with the
 nil, any unsaved modifications will be lost unless the dictionary is
 saved manually. @xref{Loading and Saving Dictionaries}.
 
-@item predictive-dict-compilation-mode
+@item predictive-dict-compilation
 Determines whether dictionaries are saved in compiled or uncompiled
-form, or both. If set to the symbol @code{'compiled}, dictionaries are
-saved in compiled form, if set to @code{'uncompiled} they are saved in
+form, or both. If set to the symbol @code{compiled}, dictionaries are
+saved in compiled form, if set to @code{uncompiled} they are saved in
 uncompiled form, and if set to anything else they are saved in both
 forms (the default). A compiled dictionary can be loaded a lot faster,
 and is always used in preference to the uncompiled form if it
@@ -2091,13 +2124,13 @@ savvy Emacs user@footnote{Keyboard macros may help here...}!
 The second approach is to start from a completely empty dictionary, and
 use the auto-add feature to automatically add words as you type them
 (@pxref{Automatic Learning}). The auto-add feature adds words when you
-``accept'' them. In this case, since the words aren't already in the
-dictionary, the only way to accept words while typing is to ensure
-dynamic completion is enabled, and type an end-of-word character (such
-as a space or punctuation character) at the end of the word
-(@pxref{Dynamic Completion}). Alternatively, you can use the fast
-learning commands @command{predictive-fast-learn-or-add-from-buffer}
-and @command{predictive-fast-learn-or-add-from-file} to add words from
+``accept'' them. Since the words aren't already in the dictionary, the
+easiest way to add new words while typing is to ensure dynamic
+completion is enabled, and type an end-of-word character (such as a
+space or punctuation character) at the end of the word (@pxref{Dynamic
+Completion}). Alternatively, you can use the fast learning commands
+@command{predictive-fast-learn-or-add-from-buffer} and
+@command{predictive-fast-learn-or-add-from-file} to add words from
 existing text (note that you @emph{must} use the fast learning commands
 for this; the normal ones will only increment the weights of words that
 are already in the dictionary).
@@ -2161,10 +2194,13 @@ dictionary, it would be tragic to lose it all! Make sure you
 occasionally backup your dictionaries by dumping them to a plain text
 file using @command{predictive-dump-dict-to-file} (@pxref{Loading and
 Saving Dictionaries}). This is vital before upgrading to a new version
-of Emacs, since there's no guarantee that the dictionary will be
-readable in the new version@footnote{The dictionaries are saved as
-compiled Elisp code for efficiency reasons, and the byte-code format can
-change even between minor Emacs versions.}.
+of the Predictive package, since there's no guarantee that old
+dictionaries will be readable in the new version (whereas the dumped
+plain-text format is usually stable across Predictive package versions;
+even if exceptionally it changes, since it's a plain-text format it will
+at the very least always be readable in Emacs, and can be manipulated
+into the format required for recreating your dictionary in the new
+Predictive package version).
 @cindex dictionaries, backup
 @cindex dictionaries, dumping
 @cindex backing-up dictionaries
@@ -2182,7 +2218,7 @@ change even between minor Emacs versions.}.
 This chapter describes the more advanced customisation features provided
 by predictive mode. Many of these are on the borderline between
 user-customisations and features to be used by Lisp packages that
-enhanced predictive completion for specific major modes, though
+enhance predictive completion for specific major modes, though
 describing all the features available to Lisp packages is beyond the
 scope of this user manual. @xref{Region-Local Dictionaries, , ,
 predictive-programmer-manual, Predictive Programmer Manual}.
